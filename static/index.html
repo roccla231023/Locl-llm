@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#151923">
+  <title>本地 LLM 网关</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <section id="authView" class="auth-shell hidden">
+    <div class="auth-card">
+      <div class="brand-mark">L</div>
+      <h1 id="authTitle">本地 LLM 网关</h1>
+      <p id="authHint" class="muted">输入管理员密码进入本地控制台</p>
+      <form id="authForm">
+        <label class="field">
+          <span>管理员密码</span>
+          <input id="authPassword" type="password" minlength="6" autocomplete="current-password" required autofocus>
+        </label>
+        <label id="confirmField" class="field hidden">
+          <span>确认密码</span>
+          <input id="authConfirm" type="password" minlength="6" autocomplete="new-password">
+        </label>
+        <button id="authSubmit" class="button primary wide" type="submit">登录</button>
+      </form>
+      <p class="local-note">服务默认仅监听 <code>127.0.0.1</code>，数据保存在本机。</p>
+    </div>
+  </section>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark small">L</div>
+        <div><strong id="brandName">本地 LLM 网关</strong><small>Termux Edition</small></div>
+      </div>
+      <nav id="mainNav">
+        <button data-page="overview" class="active"><span>⌂</span>概览</button>
+        <button data-page="channels"><span>◫</span>中转站</button>
+        <button data-page="credentials"><span>▦</span>分组凭证</button>
+        <button data-page="access-keys"><span>⌘</span>渠道 Key</button>
+        <button data-page="models"><span>◇</span>模型路由</button>
+        <button data-page="logs"><span>≡</span>请求日志</button>
+        <button data-page="settings"><span>⚙</span>设置</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="versionText"></span>
+        <button id="logoutBtn" class="text-button">退出</button>
+      </div>
+    </aside>
+
+    <header class="mobile-header">
+      <div class="brand-mark small">L</div>
+      <strong id="mobileTitle">概览</strong>
+      <button id="mobileMenuBtn" aria-label="打开菜单">☰</button>
+    </header>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <main class="content">
+      <section id="page-overview" class="page active">
+        <div class="page-heading">
+          <div><p class="eyebrow">LOCAL GATEWAY</p><h1>概览</h1><p class="muted">一个地址管理你的所有 OpenAI 兼容中转站。</p></div>
+          <button class="button primary" data-action="new-channel">＋ 添加中转站</button>
+        </div>
+        <div id="statsGrid" class="stats-grid"></div>
+        <div class="grid two">
+          <article class="panel">
+            <div class="panel-title"><div><h2>客户端配置</h2><p>复制到聊天客户端或代码工具</p></div></div>
+            <div class="copy-field"><span>Base URL</span><code id="baseUrlText"></code><button data-copy="base">复制</button></div>
+            <div class="copy-field"><span>API Key</span><code id="apiKeyText"></code><button data-copy="key">复制</button></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><div><h2>快速开始</h2><p>三步完成本地路由</p></div></div>
+            <ol class="steps">
+              <li><b>1</b><span>添加中转站 Base URL</span></li>
+              <li><b>2</b><span>添加多个分组真实 Key 并绑定模型</span></li>
+              <li><b>3</b><span>客户端只使用本地地址和本地访问 Key</span></li>
+            </ol>
+          </article>
+        </div>
+        <article class="panel notice-panel">
+          <span class="status-dot good"></span>
+          <div><strong>网关仅在终端进程运行时生效</strong><p>回到 Termux 按 <kbd>Ctrl</kbd> + <kbd>C</kbd> 即可关闭；数据库配置不会丢失。</p></div>
+        </article>
+      </section>
+
+      <section id="page-channels" class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">UPSTREAMS</p><h1>中转站</h1><p class="muted">中转站只保存 Base URL；真实 Key 按分组单独管理。点击“管理分组”可逐个拉取模型。</p></div>
+          <button class="button primary" data-action="new-channel">＋ 添加中转站</button>
+        </div>
+        <div id="channelList" class="card-list"></div>
+        <div id="channelEmpty" class="empty hidden"><div>◫</div><h2>还没有中转站</h2><p>添加第一个 OpenAI 兼容中转站。</p><button class="button primary" data-action="new-channel">添加中转站</button></div>
+      </section>
+
+      <section id="page-credentials" class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">UPSTREAM GROUPS</p><h1>分组凭证</h1><p class="muted">同一个中转站可以有多个真实 Key；模型路由会绑定到具体分组。</p></div>
+          <button class="button primary" data-action="new-credential">＋ 添加分组凭证</button>
+        </div>
+        <div id="credentialFilterBar" class="filter-bar hidden"><span id="credentialFilterText"></span><button id="clearCredentialFilter" class="text-button">显示全部</button></div>
+        <article class="panel notice-panel access-key-note">
+          <span class="status-dot good"></span>
+          <div><strong>真实 Key 只在这里填写</strong><p>分组凭证属于中转站，不属于本地访问 Key。客户端只看到本地 Key，日志也不会显示真实 Key。</p></div>
+        </article>
+        <div id="credentialList" class="card-list"></div>
+        <div id="credentialEmpty" class="empty hidden"><div>▦</div><h2>还没有分组凭证</h2><p>先添加一个中转站，再为它添加一个或多个真实上游 Key。</p><button class="button primary" data-action="new-credential">添加分组凭证</button></div>
+      </section>
+
+      <section id="page-access-keys" class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">CLIENT ACCESS</p><h1>渠道 Key</h1><p class="muted">每个本地 Key 绑定一个中转站；相同模型名可以在不同渠道重复使用。</p></div>
+          <button class="button primary" data-action="new-access-key">＋ 添加渠道 Key</button>
+        </div>
+        <article class="panel notice-panel access-key-note">
+          <span class="status-dot good"></span>
+          <div><strong>渠道 Key 是给客户端使用的本地 Key</strong><p>它不会替代中转站里的真实上游 Key，也不会把真实 Key 暴露给客户端。客户端只需切换这个 Key，就能切换中转站。</p></div>
+        </article>
+        <div id="accessKeyList" class="card-list"></div>
+        <div id="accessKeyEmpty" class="empty hidden"><div>⌘</div><h2>还没有渠道 Key</h2><p>创建一个绑定中转站的本地 Key。</p><button class="button primary" data-action="new-access-key">添加渠道 Key</button></div>
+      </section>
+
+      <section id="page-models" class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">ROUTING</p><h1>模型路由</h1><p class="muted">客户端请求“对外模型名”，网关转成对应的上游模型名；同名模型按渠道分别保存。</p></div>
+          <div class="heading-actions"><button id="checkAllModelsBtn" class="button ghost" type="button">检查全部变化</button><button class="button primary" data-action="new-model">＋ 添加路由</button></div>
+        </div>
+        <div class="toolbar"><input id="modelSearch" type="search" placeholder="搜索模型或中转站……"><span id="modelCount" class="muted"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>对外模型名</th><th>中转站</th><th>分组凭证</th><th>上游模型名</th><th>状态</th><th></th></tr></thead><tbody id="modelTable"></tbody></table></div>
+        <div id="modelEmpty" class="empty compact hidden"><div>◇</div><h2>还没有模型路由</h2><p>先添加中转站，再拉取或手动添加模型。</p></div>
+      </section>
+
+      <section id="page-logs" class="page">
+        <div class="page-heading">
+          <div><p class="eyebrow">PRIVACY-SAFE</p><h1>请求日志</h1><p class="muted">只记录路由结果和状态，不保存聊天正文与完整 Key。</p></div>
+          <button id="clearLogsBtn" class="button danger ghost">清空日志</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>时间</th><th>模型</th><th>中转站</th><th>分组</th><th>状态</th><th>首字 / 总耗时</th><th>错误</th></tr></thead><tbody id="logTable"></tbody></table></div>
+        <div id="logEmpty" class="empty compact hidden"><div>≡</div><h2>暂无请求记录</h2><p>调用本地 API 后，路由结果会显示在这里。</p></div>
+      </section>
+
+      <section id="page-settings" class="page">
+        <div class="page-heading"><div><p class="eyebrow">LOCAL ONLY</p><h1>设置</h1><p class="muted">统一 Key 与管理后台安全设置。</p></div></div>
+        <form id="settingsForm" class="panel form-panel">
+          <label class="field"><span>应用名称</span><input id="settingAppName" required maxlength="50"></label>
+          <label class="field"><span>统一 API Key</span><div class="input-action"><input id="settingApiKey" required minlength="8"><button id="generateKeyBtn" type="button">重新生成</button></div><small>所有客户端都使用这个 Key；不会转发给上游。</small></label>
+          <label class="field"><span>最多保留日志数</span><input id="settingLogLimit" type="number" min="0" max="10000" required><small>设为 0 表示不自动清理。</small></label>
+          <label class="field"><span>修改管理员密码（可选）</span><input id="settingPassword" type="password" minlength="6" autocomplete="new-password" placeholder="留空则不修改"></label>
+          <div class="form-actions"><button class="button primary" type="submit">保存设置</button></div>
+        </form>
+        <article class="panel security-panel"><h2>安全提示</h2><ul><li>默认只允许本机访问，不要随意使用 <code>--host 0.0.0.0</code>。</li><li>数据库包含真实上游 Key，请妥善保护 <code>data/gateway.db</code>。</li><li>不要把数据库、备份文件或真实 Key 提交到 GitHub。</li></ul></article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="channelDialog">
+    <form id="channelForm" method="dialog" class="dialog-form">
+      <div class="dialog-head"><div><p class="eyebrow">UPSTREAM</p><h2 id="channelDialogTitle">添加中转站</h2></div><button class="icon-button" value="cancel" formnovalidate aria-label="关闭">×</button></div>
+      <input id="channelId" type="hidden">
+      <label class="field"><span>名称</span><input id="channelName" maxlength="80" placeholder="例如：中转站 A" required></label>
+      <label class="field"><span>API Base URL</span><input id="channelBaseUrl" type="url" placeholder="https://relay.example.com/v1" required><small>可填写域名根地址或以 <code>/v1</code> 结尾的地址。</small></label>
+      <article class="panel notice-panel compact-notice"><span class="status-dot good"></span><div><strong>真实 Key 在“分组凭证”中管理</strong><p>一个中转站可以添加多个分组，每个分组使用不同真实 API Key。这里仅配置站点名称和 Base URL。</p></div></article>
+      <label class="switch-row"><span><b>启用中转站</b><small>禁用后其模型不会出现在本地 API</small></span><input id="channelEnabled" type="checkbox" checked><i></i></label>
+      <div class="dialog-actions"><button class="button ghost" value="cancel" formnovalidate>取消</button><button class="button primary" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="accessKeyDialog">
+    <form id="accessKeyForm" method="dialog" class="dialog-form">
+      <div class="dialog-head"><div><p class="eyebrow">CLIENT ACCESS</p><h2 id="accessKeyDialogTitle">添加渠道 Key</h2></div><button class="icon-button" value="cancel" formnovalidate aria-label="关闭">×</button></div>
+      <input id="accessKeyId" type="hidden">
+      <label class="field"><span>名称</span><input id="accessKeyName" maxlength="80" placeholder="例如：工作客户端" required></label>
+      <label class="field"><span>绑定中转站</span><select id="accessKeyChannel" required></select><small>使用该 Key 的请求都会进入这个中转站。</small></label>
+      <label class="field"><span>本地访问 Key</span><div class="input-action"><input id="accessKeyValue" type="password" autocomplete="off" minlength="12" required><button id="toggleAccessKey" type="button">显示</button></div><div class="input-action secondary-action"><button id="generateAccessKeyBtn" type="button">重新生成</button><button id="copyAccessKeyBtn" type="button">复制</button></div><small>只保存在本地数据库；创建后请复制给对应客户端，不要发送到聊天中。</small></label>
+      <label class="switch-row"><span><b>启用渠道 Key</b><small>禁用后使用此 Key 的请求会返回 401</small></span><input id="accessKeyEnabled" type="checkbox" checked><i></i></label>
+      <div class="dialog-actions"><button class="button ghost" value="cancel" formnovalidate>取消</button><button class="button primary" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="credentialDialog">
+    <form id="credentialForm" method="dialog" class="dialog-form">
+      <div class="dialog-head"><div><p class="eyebrow">UPSTREAM GROUP</p><h2 id="credentialDialogTitle">添加分组凭证</h2></div><button class="icon-button" value="cancel" formnovalidate aria-label="关闭">×</button></div>
+      <input id="credentialId" type="hidden">
+      <label class="field"><span>所属中转站</span><select id="credentialChannel" required></select></label>
+      <label class="field"><span>分组名称</span><input id="credentialName" maxlength="120" placeholder="例如：GPT 分组" required></label>
+      <label class="field"><span>真实上游 API Key</span><div class="input-action"><input id="credentialApiKey" type="password" autocomplete="off"><button id="toggleCredentialKey" type="button">显示</button></div></label>
+      <label class="field"><span>认证方式</span><select id="credentialAuthType"><option value="bearer">Authorization: Bearer</option><option value="x-api-key">x-api-key</option><option value="none">无需认证</option></select></label>
+      <label class="field"><span>额外请求头（JSON，可选）</span><textarea id="credentialHeaders" rows="3" spellcheck="false" placeholder='{"Custom-Header":"value"}'></textarea></label>
+      <label class="switch-row"><span><b>启用分组凭证</b><small>禁用后绑定的模型不会转发</small></span><input id="credentialEnabled" type="checkbox" checked><i></i></label>
+      <div class="dialog-actions"><button class="button ghost" value="cancel" formnovalidate>取消</button><button class="button primary" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="modelDialog">
+    <form id="modelForm" method="dialog" class="dialog-form">
+      <div class="dialog-head"><div><p class="eyebrow">ROUTE</p><h2 id="modelDialogTitle">添加模型路由</h2></div><button class="icon-button" value="cancel" formnovalidate aria-label="关闭">×</button></div>
+      <input id="modelId" type="hidden">
+      <label class="field"><span>中转站</span><select id="modelChannel" required></select></label>
+      <label class="field"><span>分组凭证</span><select id="modelCredential" required></select><small>模型请求将使用这个分组的真实 Key。</small></label>
+      <label class="field"><span>对外模型名</span><input id="modelPublicName" maxlength="300" placeholder="例如：claude-sonnet" required><small>同一中转站内必须唯一；不同渠道可以使用相同名称。</small></label>
+      <label class="field"><span>上游模型名</span><input id="modelUpstreamName" maxlength="300" placeholder="例如：claude-sonnet-4-20250514" required></label>
+      <label class="switch-row"><span><b>启用模型</b><small>禁用后不会出现在 <code>/v1/models</code></small></span><input id="modelEnabled" type="checkbox" checked><i></i></label>
+      <div class="dialog-actions"><button class="button ghost" value="cancel" formnovalidate>取消</button><button class="button primary" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="importDialog">
+    <div class="dialog-form large">
+      <div class="dialog-head"><div><p class="eyebrow">DISCOVER</p><h2>从中转站拉取模型</h2><p id="importChannelName" class="muted"></p></div><button id="closeImportBtn" class="icon-button" aria-label="关闭">×</button></div>
+      <label class="field"><span>拉取分组</span><select id="importCredential" required></select><small>每个分组单独请求上游 <code>/v1/models</code>，导入后会记录所属分组。</small></label>
+      <div class="toolbar"><input id="importSearch" type="search" placeholder="筛选模型……"><button id="toggleAllModels" class="button ghost small">全选/取消</button></div>
+      <div id="importLoading" class="loading hidden"><span></span>正在请求上游 <code>/v1/models</code>……</div>
+      <div id="importModelList" class="check-list"></div>
+      <div class="dialog-actions"><button id="cancelImportBtn" class="button ghost">取消</button><button id="confirmImportBtn" class="button primary">导入已选模型</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="modelChangesDialog">
+    <div class="dialog-form model-changes-form">
+      <div class="dialog-head"><div><p class="eyebrow">MODEL SYNC</p><h2>模型变化检查</h2><p class="muted">检查只会读取上游列表，不会自动修改路由。</p></div><button id="closeModelChangesBtn" class="icon-button" aria-label="关闭">×</button></div>
+      <article class="panel notice-panel compact-notice model-check-notice"><span class="status-dot good"></span><div><strong>对外模型名可以保持稳定</strong><p>上游改名后，选择新模型并点击“替换并保留对外名”，客户端的 URL、Key 和模型名都不需要修改。</p></div></article>
+      <div id="modelCheckLoading" class="loading hidden"><span></span><b id="modelCheckProgress">正在检查上游模型列表……</b></div>
+      <div id="modelCheckSummary" class="change-summary hidden"></div>
+      <div id="modelCheckResults" class="change-results"></div>
+      <div class="dialog-actions"><button id="closeModelChangesFooterBtn" class="button ghost">关闭</button></div>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

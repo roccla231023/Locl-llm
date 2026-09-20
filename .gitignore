@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+
+# Contains real upstream API keys
+data/*
+!data/.gitkeep
+backups/
+
+*.log
+*.zip
